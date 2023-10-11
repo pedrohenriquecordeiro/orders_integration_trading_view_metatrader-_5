@@ -185,42 +185,39 @@ class MT5():
                     pip_take_profit = round(round(abs(order.entry - order.take_profit),5)*math.pow(10,digits),1)
                     risk_return     = round(pip_take_profit/pip_stop_loss,2)
 
-                    lot_size           = round((balance * (risk/100))/(pip_stop_loss*pip_value*100), 2)  # poq multiplicar por 100 ali ainda  n sei
-
-                    print(symbol, pip_value , lot_size, pip_stop_loss)
+                    lot_size        = round((balance * (risk/100))/(pip_stop_loss*pip_value*100), 2)  # multiplicar por 100 para voltar para o lote padrão do par
 
 
                     ## envio das ordens
                     if int(round(lot_size * 100,0)) != 0:
 
-                        pass
-#                        type_order = mt5.ORDER_TYPE_BUY_LIMIT if side == 'Buy' else mt5.ORDER_TYPE_SELL_LIMIT
-#
-#                        request = {
-#                            "action"       : mt5.TRADE_ACTION_PENDING,
-#                            "symbol"       : symbol,
-#                            "volume"       : lot_size,
-#                            "type"         : type_order,
-#                            "price"        : entry,
-#                            "sl"           : stop_loss,
-#                            "stoplimit"    : stop_loss,
-#                            "tp"           : take_profit,
-#                            "deviation"    : deviation,                             
-#                            "magic"        : 0,
-#                            "comment"      : f"[{symbol_ref} - {risk_return} - {pip_stop_loss}]",
-#                            "type_time"    : mt5.ORDER_TIME_GTC,
-#                            "type_filling" : mt5.ORDER_FILLING_RETURN,
-#                        }
-#
-#                        # send a trading request
-#                        result = mt5.order_send(request)
-#
-#                        # check the execution result
-#                        if result.retcode != mt5.TRADE_RETCODE_DONE:
-#                            window['logs'].print(f"{self.current_timestamp_str()} -- order send failed  #{symbol} - dont forget to allow algorithmic trading in mt5")
-#                            print(result)
-#                        else:
-#                            window['logs'].print(f"{self.current_timestamp_str()} -- order send done #{symbol}  [{result.order}] - lot_size:{lot_size} - e:{entry} - rr:{risk_return}")
+                        type_order = mt5.ORDER_TYPE_BUY_LIMIT if side == 'Buy' else mt5.ORDER_TYPE_SELL_LIMIT
+
+                        request = {
+                            "action"       : mt5.TRADE_ACTION_PENDING,
+                            "symbol"       : symbol,
+                            "volume"       : lot_size,
+                            "type"         : type_order,
+                            "price"        : entry,
+                            "sl"           : stop_loss,
+                            "stoplimit"    : stop_loss,
+                            "tp"           : take_profit,
+                            "deviation"    : deviation,                             
+                            "magic"        : 0,
+                            "comment"      : f"[{symbol_ref} - {risk_return}]",
+                            "type_time"    : mt5.ORDER_TIME_GTC,
+                            "type_filling" : mt5.ORDER_FILLING_RETURN,
+                        }
+
+                        # send a trading request
+                        result = mt5.order_send(request)
+
+                        # check the execution result
+                        if result.retcode != mt5.TRADE_RETCODE_DONE:
+                            window['logs'].print(f"{self.current_timestamp_str()} -- order send failed  #{symbol} - dont forget to allow algorithmic trading in mt5")
+                            
+                        else:
+                            window['logs'].print(f"{self.current_timestamp_str()} -- order send done #{symbol}  [{result.order}] - lot_size:{lot_size} - e:{entry} - rr:{risk_return}")
 
                     else:
                         window['logs'].print(f"{self.current_timestamp_str()} -- order not send - position size it does not fit #{symbol}  #{entry}  #{lot_size}")
