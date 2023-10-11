@@ -87,7 +87,7 @@ class MT5():
             window,
             risk,
             folder_path,
-            currency,
+            account_currency,
             login,
             password,
             server,
@@ -101,7 +101,7 @@ class MT5():
         orders = tradingview.get_orders(
             window = window,
             folder_path = folder_path,
-            currency = currency)
+            currency = account_currency)
 
         if self.login(window,login,password,server):
 
@@ -116,68 +116,81 @@ class MT5():
             for order in orders:
 
                 symbol = order.symbol
+                symbol_info = mt5.symbol_info(symbol)
+
                 symbol_ref = order.symbol_ref
 
-                # se existe o par no metatrader 5
+                point       = symbol_info.point * 10 # 0.00001 ===> 0.0001
+                digits      = symbol_info.digits - 1 # 5 ===> 4 para olhar apenas para os pips
+
+                side        = order.side
+                entry       = round(order.entry,digits - 1)       # -1 :> arredonda para tirar os pipetes
+                take_profit = round(order.take_profit,digits - 1) # -1 :> arredonda para tirar os pipetes
+                stop_loss   = round(order.stop_loss,digits - 1)   # -1 :> arredonda para tirar os pipetes
+
+                # verifica se existe o par no metatrader 5
                 if symbol in list_of_symbols:
  
-                    if symbol_ref not in list_of_symbols:
-
-                        symbol_ref_inverted = f'{symbol_ref[3:6]}{symbol_ref[0:3]}'
-
-                        if symbol_ref_inverted in list_of_symbols:
-
-                            symbol_info         = mt5.symbol_info(symbol)              # informacoes do ativo principal
-                            symbol_ref_info     = mt5.symbol_info(symbol_ref_inverted) # informacoes do ativo referencia para calculo
-                                
-                            point               = symbol_info.point
-                            digits              = symbol_info.digits
-                            trade_contract_size = symbol_info.trade_contract_size
-
-                            # inverte para pegar a referencia ao par da moeda margem
-                            ask_ref = round(1/round(symbol_ref_info.ask, symbol_ref_info.digits),symbol_ref_info.digits) 
-                            bid_ref = round(1/round(symbol_ref_info.bid, symbol_ref_info.digits),symbol_ref_info.digits) 
-
-                            exchange_rate = ask_ref if ask_ref != 0 else bid_ref 
+                    ## calculo
+                    # https://www.earnforex.com/guides/pip-value-formula/
 
 
+                    # micro-lotes -- a posicao vai ser montada a partir de micro lotes
+                    # padrao - 100000
+                    # mini   - 10000
+                    # micro  - 1000
+                    lot_size_default = 1000 
+
+                    ## calculo do pip
+
+                    # Scenario 1
+                    if symbol.endswith(account_currency):  
+                        pip_size = point
+                        pip_value = round((lot_size_default * pip_size), 2)
+
+                    # Scenario 2
+                    elif symbol.startswith(account_currency):  
+                        pip_size = point
+                        ask_rate, bid_rate = self.get_ask_bid_rate(symbol, window, login, password, server)
+                        if ask_rate:
+                            pip_value =round( ((lot_size_default * pip_size) / ask_rate),2)
                         else:
-                            window['logs'].print(f"{self.current_timestamp_str()} -- not found symbols of reference {symbol_ref} and {symbol_ref_inverted} -- order not send")
-                            continue
-                    else:
+                            window['logs']\
+                                .print(f"{self.current_timestamp_str()} -- order not send  #{symbol} -- try")
 
-                        symbol_info     = mt5.symbol_info(symbol)     # informacoes do ativo principal
-                        symbol_ref_info = mt5.symbol_info(symbol_ref) # informacoes do ativo referencia para calculo
-                            
-                        point               = symbol_info.point
-                        digits              = symbol_info.digits
-                        trade_contract_size = symbol_info.trade_contract_size
+                    # Scenario 3 
+                    else:  
+                        matching_pair = self.get_matching_pair(window, login, password, server, account_currency, base_currency = symbol[3:6])
 
-                        ask_ref = round(symbol_ref_info.ask, symbol_ref_info.digits)
-                        bid_ref = round(symbol_ref_info.bid, symbol_ref_info.digits)
+                        # Scenario 3a
+                        if matching_pair.endswith(account_currency): 
+                            ask_rate, bid_rate = self.get_ask_bid_rate(matching_pair, window, login, password, server)
+                            if bid_rate:
+                                pip_value = round(((lot_size_default * point) * bid_rate),2)
+                            else:
+                                window['logs']\
+                                    .print(f"{self.current_timestamp_str()} -- order not send  #{symbol} -- try")
+                                
+                        # Scenario 3b
+                        elif matching_pair.startswith(account_currency): 
+                            ask_rate, bid_rate = self.get_ask_bid_rate(matching_pair, window, login, password, server)
+                            if ask_rate:
+                                pip_value = round(((lot_size_default * point) / ask_rate), 2)
+                            else:
+                                window['logs']\
+                                    .print(f"{self.current_timestamp_str()} -- order not send  #{symbol} -- try")
 
-                        exchange_rate = ask_ref if ask_ref != 0 else bid_ref
 
-                    if exchange_rate == 0:
-                        window['logs'].print(f"{self.current_timestamp_str()} #{symbol} try again -- order not send")
-                        continue
-
-                    side        = order.side
-                    entry       = round(order.entry,digits - 1) # arredonda para tirar os pipetes
-                    take_profit = round(order.take_profit,digits - 1)
-                    stop_loss   = round(order.stop_loss,digits - 1)
-
-                    # calculo
-                    pip_value       = round(((point)/exchange_rate) * trade_contract_size, 2)
-
-                    pip_stop_loss   = round(round(abs(order.entry - order.stop_loss),5)*math.pow(10,digits - 1),1)
-                    pip_take_profit = round(round(abs(order.entry - order.take_profit),5)*math.pow(10,digits - 1),1)
+                    pip_stop_loss   = round(round(abs(order.entry - order.stop_loss),5)*math.pow(10,digits),1)
+                    pip_take_profit = round(round(abs(order.entry - order.take_profit),5)*math.pow(10,digits),1)
                     risk_return     = round(pip_take_profit/pip_stop_loss,2)
 
-                    lot_size           = round((balance * (risk/100))/(pip_stop_loss*pip_value), 2)
+                    lot_size           = round((balance * (risk/100))/(pip_stop_loss*pip_value*100), 2)  # poq multiplicar por 100 ali ainda  n sei
 
-                    print(symbol, pip_value , pip_take_profit, pip_stop_loss, lot_size, symbol_ref, exchange_rate)
+                    print(symbol, pip_value , lot_size, pip_stop_loss)
 
+
+                    ## envio das ordens
                     if int(round(lot_size * 100,0)) != 0:
 
                         pass
@@ -276,6 +289,44 @@ class MT5():
         self.turn_off(mt5)
 
         return orders
+    
+
+
+    def get_ask_bid_rate(self, symbol, window, login, password, server):
+
+        if self.login(window, login, password, server, return_off = True):
+
+            list_of_symbols = [symbol.name for symbol in mt5.symbols_get()]
+
+            # verifica se existe o par no metatrader 5
+            if symbol in list_of_symbols:
+
+                symbol_info = mt5.symbol_info(symbol) # informacoes do ativo referencia para calculo
+
+                ask_rate = round(symbol_info.ask, symbol_info.digits)
+                bid_rate = round(symbol_info.bid, symbol_info.digits)
+
+                return ask_rate, bid_rate
+                    
+            else:
+                    
+                return None
+
+
+
+    def get_matching_pair(self, window, login, password, server, account_currency, base_currency):
+
+        if self.login(window, login, password, server, return_off = True):
+
+            list_of_symbols = [symbol.name for symbol in mt5.symbols_get()]
+
+            for symbol in list_of_symbols:
+
+                if account_currency in symbol and base_currency in symbol:
+
+                    return symbol
+        
+        return None
 
 
     def current_timestamp_str(self):
