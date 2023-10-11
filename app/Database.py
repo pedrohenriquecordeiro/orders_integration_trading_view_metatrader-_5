@@ -36,7 +36,8 @@ class DatabaseInputs:
             "LOGIN"                  : input_now['LOGIN'], 
             "PASSWORD"               : input_now['PASSWORD'], 
             "SERVER"                 : input_now['SERVER'], 
-            "FOLDER_PATH"            : input_now['FOLDER_PATH']
+            "FOLDER_PATH"            : input_now['FOLDER_PATH'],
+            "MAX_POSITIONS"          : input_now['MAX_POSITIONS']
         })
 
         db.close()
