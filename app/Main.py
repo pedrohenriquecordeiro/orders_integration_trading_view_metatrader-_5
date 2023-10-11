@@ -224,7 +224,7 @@ while True:
             window = window,
             risk = float(risk_value),
             folder_path = str(folder_path),
-            currency = str(currency),
+            account_currency = str(currency),
             login = int(login),
             password = str(password),
             server = str(server),
